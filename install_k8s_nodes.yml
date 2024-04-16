@@ -1,0 +1,98 @@
+---
+- name: Install K8S   
+  hosts: cp
+  remote_user: prlab
+  become: true
+  become_user: root
+  tasks:
+    - name: update system 
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    - name: install git
+      apt:
+        name: git
+        state: present
+    - name: git clone k8s installer
+      git:
+        repo: https://git.prlab.io/andrewli315/k8s-install
+        dest: /home/prlab/k8s/k8s-install
+    - name: copy hosts file
+      copy:
+        src: ./hosts
+        dest: /home/prlab/k8s/k8s-install
+    - name: install k8s CP and helm chart
+      shell: |
+          ./k8s-install.sh ./hosts cp
+          ./helm-install.sh
+      args:
+          chdir: /home/prlab/k8s/k8s-install
+- name: install k8s nodes
+  hosts: nodes
+  remote_user: prlab
+  become: true
+  become_user: root
+  tasks:
+    - name: apt update
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    - name: install git
+      apt:
+        name: git
+        state: present
+
+    - name: git clone 
+      ansible.builtin.git:
+        repo: https://git.prlab.io/andrewli315/k8s-install
+        dest: /home/prlab/k8s/k8s-install
+    - name: copy
+      copy:
+        src: ./hosts
+        dest: /home/prlab/k8s/k8s-install/hosts
+
+    - name: install k8s 
+      shell: |
+          ./k8s-install.sh hosts
+          echo "Install finish"
+      args:
+          chdir: /home/prlab/k8s/k8s-install
+
+- name: retrieve join.sh
+  hosts: cp
+  remote_user: prlab
+  become: true
+  become_user: root
+  tasks:
+    - name: get join command
+      shell: |
+        echo "$(kubeadm token create --print-join-command)" > /tmp/join.sh
+        chmod +x /tmp/join.sh
+    - name: copy file
+      fetch:
+        src: '/tmp/join.sh'
+        dest: '/tmp'
+
+- name: get the command line 
+  hosts: localhost
+  tasks:
+    - name: mv join.sh
+      shell: |
+        cp /tmp/{{cp_ip}}/tmp/join.sh /tmp/join.sh
+        chmod +x /tmp/join.sh
+- name: join to k8s cp
+  hosts: nodes
+  remote_user: prlab
+  become: true
+  become_user: root
+  tasks:
+    - name: get join command shell script
+      copy:
+        src: /tmp/join.sh
+        dest: /tmp/join.sh
+    - name: join to cluster 
+      shell: |
+        sh /tmp/join.sh
+
+
+
